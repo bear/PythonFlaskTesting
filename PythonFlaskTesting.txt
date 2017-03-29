@@ -1,44 +1,160 @@
+How to Test and Deploya Python Web App
+An Opinionated Tour of Testing Tools
+
 2
+Bear (Mike Taylor)
+@codebear
+Site Reliability Engineer at CircleCI
+
+Using Python to build, test and deploy applications at:
+&Yet
+Mozilla
+Seesmic
+Open Source Applications Foundation
+
 hello, i'm bear
 my job at CircleCI is the operations side of the Site Reliability Engineering team
 I've been using python to develop applications and ops tools for many decades and when I joined CircleCI I naturally started to use circleci in my python projects.
 One of my goals is to make Circle CI a best-in-class tool for Python Continuous Integration and to do that I decided to create a simple web application and then apply the current best practices for testing and deploys to that project.
 This talk is the result of that research
 
+
+This talk will not be
+a deep dive into any one area of testing
+a debate on which style, framework or methodology is better
+
+This talk will be
+Opinionated
+A list of what tools are available
+A collection of resources available
+Useful (hopefully)
+
+
 3
 This talk will not be a deep dive into any one area, nor will it be a battle-of-the-frameworks.
 What it will be is an opinionated list of what tools and practices I consider useful for developing and deploying a modern python web application.
 At the end of the talk my goal is to have given you some ideas and thoughts about python testing, even if you don't agree with them.
 
+
 4
+Tenki - A Weather Service
+Flask Web site & API that returns the weather
+https://github.com/bear/tenki
+OpenWeatherMaphttp://openweathermap.org/api
+PyOWM - Python wrapper for the OpenWeatherMap APIhttps://github.com/csparpa/pyowm
 In order for this to be in any way useful, you have to be able to recreate what i'm talking about, not just be shown a deck of slides and some notes.
 To that end I created a simple Flask app that uses OpenWeatherMap and the python module PyOWM to return the weather for a given zip code.
 This will require a Flask code framework, an API and also will require calling out to an external service for data - all of which need to be tested.
 Note that I could have created this with Django or Bottle for the app, but I found Flask to be very minimal in it's requirements.
 
+
 5
+Developer Testing
+Component Testing
+Integration Testing
+Acceptance Testing
+System Testing
+
+
+Python Web App Testing Path
+Fast Tests
+Slow Tests
+Developer
+CI
 This is the path that any app travels while being tested.
 The flow is from the Developer, thru components (aka UI), then on to Integration testing and finally into more formal acceptance and system testing.
 The area of responsibility is divided between the Developer and your Continuous Integration solution.
 This slide also points out that testing must be very fast in order for it to be useful. 
 The slower tests are reserved for the parts of the path that do not see a lot of change.
 
+
 6
+Developer Testing
+Must be very fast
+Started via Makefile
+pytest
+Must be fast
+pre-commit hooks
+PyEnv -- NO System Python
+Able to run specific test(s)
+Did I mention fast
+
 Let's take a look at Developer Testing, which is probably the most interesting part for everyone here. 
 To be honest this part is the least interesting part for me as an Ops person, except when it fails and the CI starts failing and every developer starts posting their favorite version of "works for me"
 
  (switch to slide 7)
 
+
 7
+Developer Testing
+Must be very fast
+Started via Makefile
+pytest
+Must be fast
+pre-commit hooks
+PyEnv -- NO System Python
+Able to run specific test(s)
+Did I mention fast
+
 and over in ops we usually start responding with (switch to slide 8)
 
+
 8
+Developer Testing
+Must be very fast
+Started via Makefile
+pytest
+Must be fast
+pre-commit hooks
+PyEnv -- NO System Python
+Able to run specific test(s)
+Did I mention fast
+
 
 9
+Developer Testing
+Must be very fast
+all commands run from a Makefile
+PyEnv -- NO System Python
+pytest
+pre-commit hooks
+Did I mention fast
+
 If even a few of the items I show you today are followed, then we can start to bring together the dev and ops teams ...
 The first step towards a sparkly devops princess future is the Makefile
 
+
 10
+Makefile
+clean:
+	python manage.py clean
+lint: clean
+	pycodestyle --config={toxinidir}/setup.cfg
+test: clean
+	python manage.py test
+
+integration:
+	python manage.py integration
+
+coverage: lint
+	@coverage run --source=tenki manage.py test
+	@coverage html
+	@coverage report
+
+info:
+	@python --version
+	@pip --version
+	@virtualenv --version
+
+ci: info test integration coverage
+	@CODECOV_TOKEN=`cat .codecov-token` codecov
+
+all: clean integration coverage
+
+install-hook:
+	git-pre-commit-hook install --force --plugins json --plugins yaml \
+--plugins flake8 --flake8_ignore E111,E124,E126,E201,E202,E221,E241,E302,E501,N802,N803
+
 The makefile is where we document what steps are taken to setup an environment, what steps are needed for each test type and also what steps are needed for deploys.
 Here is where we discover what is required to get a clean test environment
 What is required to run lint and the different test types
@@ -48,7 +164,38 @@ All which are essential for current developers and also to enable new developers
 (show the clean, lint, test and info targets)
 The info target is useful to help document the environment currently being run which is useful when you are looking back in history to find out what has changed.
 
+
 11
+manage.py (a Flask-Script)
+import sys
+from flask.ext.script import Manager, Server
+from flask.ext.script.commands import Command, ShowUrls, Clean
+from tenki import create_app
+
+def test(marker="not web and not integration"):
+    test_args = ['--strict', '--verbose', '--tb=long', 'tests', '-m', marker]
+    import pytest
+    errno = pytest.main(test_args)
+    sys.exit(errno)
+
+class Test(Command):
+    def run(self):
+        self.test_suite = True
+        test()
+class Integration(Command):
+    def run(self):
+        self.test_suite = True
+        test(marker=”integration”)
+class WebTests(Command):
+    def run(self):
+        self.test_suite = True
+        test(marker="web")
+
+app = create_app('tenki.settings.%sConfig' % env.capitalize())
+manager = Manager(app)
+manager.add_command("test", Test())
+manager.add_command("integration", Integration())
+manager.add_command("webtest", WebTests())
 both Flask and Django make use of an management script to run the app. 
 The role of manage.py is to put into a single location what checks are needed before starting the app and what options are available to someone wanting to run the app.
 We are going to make use of this to define some custom commands that will be used to start the unit, web and integration tests.
@@ -56,33 +203,116 @@ We are going to make use of this to define some custom commands that will be use
 (Show the Test, Integration and WebTests class def’s and talk about test_suite = True)
 
 12
+pyenv -- https://pypi.python.org/pypi/pyenv
+bear@opus ~/circleci/tenki
+$ pyenv virtualenv 2.7.10 tenki27
+New python executable in /usr/local/var/pyenv/versions/2.7/envs/tenki27/bin/python2.7
+...
+
+bear@opus ~/circleci/tenki
+$ pyenv local tenki27
+pyenv-virtualenv: deactivate
+pyenv-virtualenv: activate tenki
+
+(tenki27)
+bear@opus ~/circleci/tenki
+$ git clone git@github.com:bear/tenki.git .
+
+(tenki27)
+bear@opus ~/circleci/python_testing/tenki (master %)
+$ make update-all
 We need to ensure that the developers and qa/ci environments are *identical*
 To do that we use PyEnv to define the virtualenv and to also ensure that it is active for the project.
 This removes the one single largest cause of CI/CD pipeline failure ... a developer's laptop having multiple changes to the system's python.
 
+
 13
+pytest -- http://pytest.org/latest/
+runs on Posix/Windows, Python 2.6-3.5, PyPy
+Mature testing framework that has no boilerplate, 
+Doesn't require special syntax for assertions,
+Tests can be written as xUnit classes or as functions,
+pytest can run tests written using nose, unittest, and doctest.
+Marking test functions with attributes,
+Skip and xfail
 pytest is another key point along our testing path
 It allows us to create tests without a lot of boilerplate, to use assertions as they are normally written
 to be able to run xUnit, doctests and other test formats in a standard manner.
 pytest also gives us the ability to mark (using attributes) different tests as web, integration or unit tests which will come in handy later
 
+
 14
+git pre-commit -- https://pypi.python.org/pypi/git-pre-commit-hook
+built-in plugins for:
+validate json files
+validate Python-code with flake8 
+validate Python-code with frosted
+validate .rst files with restructuredtext_lint
+validate .ini files with configparser
+validate .yaml files with PyYAML
+validate .xml files with xml.etree.ElementTree
+check filesize
+http://trixie-j-lulamoon.deviantart.com/art/You-shall-not-pass-424148297
 pre-commit hooks are essential to enforcing that our tests, lint’ing and a variety of other validation steps are performed *before* the code makes it to the git repo. 
 This will allow everyone in the CI pipeline to feel confident that the code being tested is not going to fail from someone typo'ing a json blob or something equally face-palm-y.
 The python module git-pre-commit-hook is an amazing tool for this and comes out of the box with quite a few plugins to make life more sane.
 
+
 15
+[check-manifest]
+ignore =
+  circle.yml
+
+[pycodestyle]
+ignore = E111,E124,E126,E201,E202,E221,E241,E302,E501
+
+[tool:pytest]
+markers =
+  web: tests that require chrome webdriver
+  integration: tests that require mocking or external services
+
+
+setup.cfg
 a majority of the tools so far all can be customized for the specific environment. 
 The file setup.cfg is used by pytest, flake8, tox and a number of other tools to read in any overrides so it is worthwhile to keep it current.
 Here we are letting flake8 know which warnings and errors it can skip reporting about. 
 We also are defining what markers are pesent in our tests so pytest can know how to parse the command line we give it later.
 
+
 16
+Component Testing
+Docker Compose
+nginx
+uwsgi
+robcherry/docker-chromedriver:latest
+NOTE - Docker is not the only way to do WebUI or Component testing. Some consider it heavy-handed in that it requires developers to maintain a tech stack (which perversly re-introduces “worked on my stack” issues.)
 In order to properly test the web ui you need to be able to run the app and then have it respond to requests from a web server. 
 In the past this required different staging or testing servers that would constantly be out of date; require that the magic phrase be uttered to the sysadmin just to get that server updated.
 Fortunately now we can take advantage of Docker (and other VM environments) to create, deploy and run all of the required items on the developer's laptop...
 
+
 17
+uwsgi:
+build: .
+dockerfile: docker-uwsgi
+web:
+build: .
+dockerfile: docker-nginx
+links:
+    - uwsgi
+expose:
+    - 8000
+ports:
+    - "8000:8000"
+chromedriver:
+image: robcherry/docker-chromedriver:latest
+links:
+    - web
+ports:
+    - "4444:4444"
+environment:
+    CHROMEDRIVER_WHITELISTED_IPS: ""
+docker-compose.yml
 docker-compose hides a *lot* of the complexity involved in coordinating multiple vm's - the ports involved, getting host names to match across vms, setting up network tunnels for port forwarding, etc
 Here we see three docker vm's being defined: uwsgi, web and chromedriver. 
 uwsgi is the vm that runs the app using uwsgi; web is the vm that will run nginx which then will proxy-pass all requests to the uwsgi vm.
@@ -90,7 +320,26 @@ chromedriver is the vm that creates a headless browser environment that can be m
 The build: . lets us store the docker-compose files in the same directory as our application so we can take advantage of the docker tools to inject our app into the vm's file space.
 The Links, expose and ports items are all the magic items to let docker know what the networking relationship is between the vm's - it then goes off and ensures each vm has the proper port configurations.
 
+
 18
+docker-cleanup:
+    docker rm $(docker ps -q -f 'status=exited')
+    docker rmi $(docker images -q -f "dangling=true")
+
+docker-build:
+	docker-compose build
+	docker-compose pull
+	docker-compose rm -f
+
+docker-start:
+	docker-compose up -d
+
+webtest: docker-start
+	$(eval DRIVER_IP := $(shell ./wait_for_ip.sh))
+	DOCKER_IP=$(DOCKER_IP) python manage.py webtest
+	docker-compose stop
+
+makefile
 of course we are going to use our Makefile to document what the specific commands we need to manage our docker environment
 docker-build outlines the three steps to creating;  storing and cleanup of the vm's
 docker-start shows the command to get the docker environment up and running
@@ -99,12 +348,48 @@ webtest runs a bash script that determines what the docker ip address is
 then the script waits for the exposed ports to become available and exits
 we then use our management script to run the web tests and afterwords tell docker to stop
 
+
 19
+upstream app {
+    server uwsgi:8001;
+}
+
+server {
+    listen       8000  default_server;
+    server_name  _;
+    charset     utf-8;
+
+    location / {
+        uwsgi_pass  app;
+        include     /etc/nginx/uwsgi_params;
+    }
+}
+
+tenki-nginx.conf
 The best part about going thru the process to deploy our app locally using nginx and uwsgi is that it's almost the exact same process involved in deploying our app in a production environment.
 The nginx config shown here would only need to be tweaked a little bit - such as changing the upstream server configs and also the server_name and listen items. 
 but this is all information that the ops team would have to discover the hard way so having this already documented gives them a heads-up.
 
+
 20
+# bundle application as a tarball
+BDATE=`date +%Y%m%d` git archive -o tenki_${BDATE}.tar.gz branch
+
+
+# start uwsgi service
+uwsgi --socket :8001 --chdir /opt/tenki --module uwsgi-app --callable application
+
+#!/usr/bin/env python
+# uwsgi-app.py
+import os
+from tenki import create_app
+
+env = os.environ.get('TENKI_ENV', 'prod')
+application = create_app('tenki.settings.%sConfig' % env.capitalize())
+
+if __name__ == "__main__":
+    application.run()
+
 once our application has passed the unit, integration and web ui tests it is ready for further testing downstream within the CI pipeline.
 Because we have now proved that the application is functional, we can bundle the app into a named tarball and use that for any further deploys.
 This removes the need for git credentials to be required.
@@ -112,11 +397,27 @@ This removes the need for git credentials to be required.
 The tarball and the uwsgi line paired with the uwsgi-app.py are examples of what could be used in acceptance and system testing of our app as a part of other pieces of the system being tested.
 Our app could be an external requirement for another part of the CI/CD pipeline so this would document the steps required to get our deploy running in that test environment.
 
+Google Cloud and AppEngine
+https://circleci.com/docs/deploy-google-app-engine
+gcloud -q preview app deploy app.yaml --promote --version=staging
+
 21
+Deploy
 now deploys are not as simple as tossing a few files at a server and crossing your fingers. 
 fortunately there are already good walkthrus on how to deploy to Google AppEngine and Google Cloud Compute
 
+
+
+Resources
 22
+Tox -- Run tests using different Python versions
+Coverage.py -- Measure code coverage during test runs
+Mock -- Replace code with mock objects
+
+
+https://pages.18f.gov/testing-cookbook/python/
+http://docs.python-guide.org/en/latest/writing/tests/
+https://pythonhosted.org/testing/
 These are tools that would normally be present in any production app’s environment but are hard to describe or demonstrate for a talk.
 Tox would be used as part of the Acceptance phase of any sane CI/CD pipeline
 Coverage.py is an amazing tool that looks into your code and shines a light into those dark recesses of old and unused code - all of which are breeding grounds for future bugs.
@@ -140,3 +441,4 @@ CircleCI Support
 https://discuss.circleci.com/
 Example Repo
 https://github.com/bear/tenki/
+
