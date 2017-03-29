@@ -1,6 +1,6 @@
 ## PythonFlaskTesting
 
-Resources and Notes from the Python Testing talk I gave at DeveloperWeek 2016
+Resources and Notes from the Python Testing talk I gave at DeveloperWeek 2016 and at other Python User Groups, most recently the March 2017 Philly Python meeting.
 
 - Slides as PDF: [https://github.com/bear/PythonFlaskTesting/raw/master/PythonFlaskTesting.pdf]
 - Slide Notes: [https://github.com/bear/PythonFlaskTesting/raw/master/PythonFlaskTesting.txt]
