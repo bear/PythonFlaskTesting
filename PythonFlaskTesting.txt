@@ -285,7 +285,7 @@ Docker Compose
 nginx
 uwsgi
 robcherry/docker-chromedriver:latest
-NOTE - Docker is not the only way to do WebUI or Component testing. Some consider it heavy-handed in that it requires developers to maintain a tech stack (which perversly re-introduces “worked on my stack” issues.)
+NOTE - Docker is not the only way to do WebUI or Component testing. Some consider it heavy-handed in that it requires developers to maintain a tech stack (which perversely re-introduces “worked on my stack” issues.)
 In order to properly test the web ui you need to be able to run the app and then have it respond to requests from a web server. 
 In the past this required different staging or testing servers that would constantly be out of date; require that the magic phrase be uttered to the sysadmin just to get that server updated.
 Fortunately now we can take advantage of Docker (and other VM environments) to create, deploy and run all of the required items on the developer's laptop...
